@@ -24,7 +24,8 @@ int main() {
 
         if (pCaptureDevice && pRenderDevice) {
             // 3. 프로세서(변환기) 및 엔진 생성
-            FormatConverterProcessor converter;
+            //NoiseGateProcessor converter(-40.0f, 10.0f, 300.0f);
+            EchoProcessor converter(200.0f, 0.3f);
             AudioEngine engine;
 
             // 4. 엔진에 장치와 프로세서를 넣고 가동
