@@ -75,3 +75,48 @@ bool AudioDeviceManager::CheckFormatSupport(IMMDevice* pDevice, const std::wstri
     }
     return false;
 }
+
+ComPtr<IMMDevice> AudioDeviceManager::GetRenderDeviceByName(const std::wstring& targetName) {
+    ComPtr<IMMDeviceCollection> pCollection;
+
+    // 1. 활성화된(꽂혀있는) 모든 렌더(출력) 장치 목록 가져오기
+    HRESULT hr = m_pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    if (FAILED(hr)) return nullptr;
+
+    UINT count = 0;
+    pCollection->GetCount(&count);
+
+    // 2. 장치 목록을 하나씩 순회
+    for (UINT i = 0; i < count; ++i) {
+        ComPtr<IMMDevice> pDevice;
+        if (FAILED(pCollection->Item(i, &pDevice))) continue;
+
+        ComPtr<IPropertyStore> pProps;
+        if (FAILED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) continue;
+
+        // 3. 장치의 "친숙한 이름(Friendly Name)" 가져오기
+        PROPVARIANT varName;
+        PropVariantInit(&varName);
+        hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
+
+        if (SUCCEEDED(hr) && varName.pwszVal != nullptr) {
+            std::wstring deviceName = varName.pwszVal;
+            PropVariantClear(&varName); // 메모리 누수 방지
+
+            // 4. 장치 이름에 우리가 찾는 단어(targetName)가 포함되어 있는지 확인
+            if (deviceName.find(targetName) != std::wstring::npos) {
+                // 기존 함수 재활용: 찾은 장치의 이름과 포맷 출력
+                PrintDeviceName(pDevice.Get(), L"선택된 가상 스피커(Render)");
+                CheckFormatSupport(pDevice.Get(), L"가상 스피커");
+                return pDevice; // 찾았으면 장치 반환!
+            }
+        }
+        else {
+            PropVariantClear(&varName);
+        }
+    }
+
+    // 끝까지 다 돌았는데 못 찾은 경우
+    std::wcout << L"[실패] '" << targetName << L"' 이름이 포함된 출력 장치를 찾을 수 없습니다." << std::endl;
+    return nullptr;
+}

@@ -13,6 +13,7 @@ public:
     bool Initialize();
     ComPtr<IMMDevice> GetDefaultCaptureDevice();
     ComPtr<IMMDevice> GetDefaultRenderDevice();
+    ComPtr<IMMDevice> GetRenderDeviceByName(const std::wstring& targetName);
 
 private:
     void PrintDeviceName(IMMDevice* pDevice, const std::wstring& deviceType);

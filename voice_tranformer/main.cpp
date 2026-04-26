@@ -12,7 +12,10 @@ int main() {
 
     // 1. 시스템 초기화 (COM)
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(hr)) return -1;
+    if (FAILED(hr)) {
+        std::wcout << L"[에러] COM 초기화 실패!" << std::endl;
+        return -1;
+    }
 
     std::wcout << L"--- WASAPI 음성 변조 프로그램 ---" << std::endl;
 
@@ -20,21 +23,36 @@ int main() {
     AudioDeviceManager deviceManager;
     if (deviceManager.Initialize()) {
         auto pCaptureDevice = deviceManager.GetDefaultCaptureDevice();
-        auto pRenderDevice = deviceManager.GetDefaultRenderDevice();
+        //auto pRenderDevice = deviceManager.GetDefaultRenderDevice(); // (기본 스피커)
+        auto pRenderDevice = deviceManager.GetRenderDeviceByName(L"CABLE Input");
+
+        // [추가된 디버깅 코드] 장치를 잘 찾았는지 확인
+        if (pCaptureDevice == nullptr) {
+            std::wcout << L"[문제 발생] 기본 마이크(입력) 장치를 찾을 수 없습니다." << std::endl;
+        }
+        if (pRenderDevice == nullptr) {
+            std::wcout << L"[문제 발생] 기본 스피커(출력) 장치를 찾을 수 없습니다." << std::endl;
+        }
 
         if (pCaptureDevice && pRenderDevice) {
-            // 3. 프로세서(변환기) 및 엔진 생성
-            //NoiseGateProcessor converter(-40.0f, 10.0f, 300.0f);
-            EchoProcessor converter(200.0f, 0.3f);
-            AudioEngine engine;
+            std::wcout << L"[성공] 마이크와 스피커를 찾았습니다. 오디오 엔진을 가동합니다!" << std::endl;
+            std::wcout << L"종료하려면 아무 키나 누르세요..." << std::endl;
 
-            // 4. 엔진에 장치와 프로세서를 넣고 가동
+            //EchoProcessor converter(200.0f, 0.3f);
+            PitchShiftProcessor converter(-5.0f);
+            AudioEngine engine;
             engine.Run(pCaptureDevice.Get(), pRenderDevice.Get(), &converter);
         }
+    }
+    else {
+        std::wcout << L"[문제 발생] 오디오 장치 관리자 초기화에 실패했습니다." << std::endl;
     }
 
     // 5. 종료 처리
     CoUninitialize();
-    std::wcout << L"프로그램을 종료합니다." << std::endl;
+    std::wcout << L"\n프로그램을 종료합니다." << std::endl;
+
+    // 콘솔 창이 닫히지 않게 대기
+    system("pause");
     return 0;
 }
