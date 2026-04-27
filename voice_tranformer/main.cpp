@@ -38,10 +38,20 @@ int main() {
             std::wcout << L"[성공] 마이크와 스피커를 찾았습니다. 오디오 엔진을 가동합니다!" << std::endl;
             std::wcout << L"종료하려면 아무 키나 누르세요..." << std::endl;
 
-            //EchoProcessor converter(200.0f, 0.3f);
-            PitchShiftProcessor converter(-5.0f);
+            // 1. 이펙터들 생성
+            NoiseGateProcessor noiseGate(-45.0f); // 1빠따: 잡음 컷
+            PitchShiftProcessor pitchShift(-4.0f); // 2빠따: 피치 낮춤 (굵은 목소리)
+            EchoProcessor echo(100.0f, 0.5f);      // 3빠따: 공간감 부여
+
+            // 2. 체인 프로세서 생성 및 조립 (순서가 매우 중요!)
+            EffectChainProcessor voiceChanger;
+            voiceChanger.AddProcessor(&noiseGate);
+            voiceChanger.AddProcessor(&pitchShift);
+            voiceChanger.AddProcessor(&echo);
+
+            // 3. 엔진에는 최종적으로 하나로 묶인 체인 프로세서만 넘겨줌
             AudioEngine engine;
-            engine.Run(pCaptureDevice.Get(), pRenderDevice.Get(), &converter);
+            engine.Run(pCaptureDevice.Get(), pRenderDevice.Get(), &voiceChanger);
         }
     }
     else {

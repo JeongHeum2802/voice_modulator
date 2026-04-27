@@ -86,8 +86,7 @@ public:
             sample *= m_currentGain;
 
             // 4. 출력
-            outBuffer[i * 2] = sample;
-            outBuffer[i * 2 + 1] = sample;
+            outBuffer[i] = sample;
         }
     }
 };
@@ -135,8 +134,7 @@ public:
             // 5. 출력 (클리핑 방지)
             // 소리 두 개가 합쳐졌으므로 볼륨이 1.0을 넘어가 찢어질 수 있습니다. 
             // 전체 볼륨을 살짝(0.8) 줄여서 스피커로 내보냅니다.
-            outBuffer[i * 2] = mixedSample * 0.8f;
-            outBuffer[i * 2 + 1] = mixedSample * 0.8f;
+            outBuffer[i] = mixedSample * 0.8f;
         }
     }
 };
@@ -185,20 +183,71 @@ public:
             float sample = m_tempMonoBuffer[i];
 
             // 피치 변환 과정에서 볼륨이 커져 찢어지는(클리핑) 현상 방지를 위해 0.9 곱하기
-            outBuffer[i * 2] = sample * 0.9f;
-            outBuffer[i * 2 + 1] = sample * 0.9f;
+            outBuffer[i] = sample * 0.9f;
         }
 
         // 5. 알고리즘 특성상 발생한 I/O 지연(Latency) 처리
         // 넣은 만큼 즉시 나오지 않을 수 있으므로, 모자란 부분은 0.0f(무음)으로 채워 노이즈 방지
         for (UINT32 i = samplesReceived; i < numFrames; ++i) {
-            outBuffer[i * 2] = 0.0f;
-            outBuffer[i * 2 + 1] = 0.0f;
+            outBuffer[i] = 0.0f;
         }
     }
 
     // 런타임에 실시간으로 피치를 변경하고 싶을 때 호출하는 함수
     void SetPitch(float pitchSemiTones) {
         m_soundTouch.setPitchSemiTones(pitchSemiTones);
+    }
+};
+
+class EffectChainProcessor : public IAudioProcessor {
+private:
+    std::vector<IAudioProcessor*> m_processors;
+    std::vector<float> m_bufferA; // 핑퐁 버퍼 A
+    std::vector<float> m_bufferB; // 핑퐁 버퍼 B
+
+public:
+    // 이펙터 추가
+    void AddProcessor(IAudioProcessor* pProcessor) {
+        m_processors.push_back(pProcessor);
+    }
+
+    void Process(BYTE* pInMono, BYTE* pOutStereo, UINT32 numFrames) override {
+        float* inBuffer = reinterpret_cast<float*>(pInMono);
+        float* outBuffer = reinterpret_cast<float*>(pOutStereo);
+
+        // 등록된 이펙터가 없다면? (Bypass 모드: 원음을 그대로 스테레오로 변환)
+        if (m_processors.empty()) {
+            for (UINT32 i = 0; i < numFrames; ++i) {
+                outBuffer[i * 2] = inBuffer[i];
+                outBuffer[i * 2 + 1] = inBuffer[i];
+            }
+            return;
+        }
+
+        // 1. 임시 버퍼 크기 확보 (필요시에만 리사이즈)
+        if (m_bufferA.size() < numFrames) m_bufferA.resize(numFrames);
+        if (m_bufferB.size() < numFrames) m_bufferB.resize(numFrames);
+
+        // 2. 첫 번째 이펙터 처리 (마이크 원음 -> 버퍼A)
+        m_processors[0]->Process(pInMono, reinterpret_cast<BYTE*>(m_bufferA.data()), numFrames);
+
+        float* pCurrentResult = m_bufferA.data();
+
+        // 3. 두 번째 이펙터부터 핑퐁 (A -> B -> A -> B ...)
+        for (size_t i = 1; i < m_processors.size(); ++i) {
+            // 홀수 번째는 A->B로, 짝수 번째는 B->A로 연산
+            float* pSrc = (i % 2 == 1) ? m_bufferA.data() : m_bufferB.data();
+            float* pDst = (i % 2 == 1) ? m_bufferB.data() : m_bufferA.data();
+
+            m_processors[i]->Process(reinterpret_cast<BYTE*>(pSrc), reinterpret_cast<BYTE*>(pDst), numFrames);
+
+            pCurrentResult = pDst; // 현재 최신 데이터가 담긴 포인터 갱신
+        }
+
+        // 4. 모든 체인 연산이 끝난 최종 결과물을 스테레오로 변환하여 실제 출력 장치로 내보냄
+        for (UINT32 i = 0; i < numFrames; ++i) {
+            outBuffer[i * 2] = pCurrentResult[i];
+            outBuffer[i * 2 + 1] = pCurrentResult[i];
+        }
     }
 };
