@@ -2,11 +2,11 @@
 #include <Audioclient.h>
 #include <iostream>
 #include <conio.h>
-#include <wrl/client.h>
+#include <wrl/client.h>`
 
 using Microsoft::WRL::ComPtr;
 
-void AudioEngine::Run(IMMDevice* pCaptureDevice, IMMDevice* pRenderDevice, IAudioProcessor* pProcessor) {
+void AudioEngine::Run(IMMDevice* pCaptureDevice, IMMDevice* pRenderDevice, IAudioProcessor* pProcessor, std::atomic<bool>* pIsRunning) {
     ComPtr<IAudioClient> pCaptureClient, pRenderClient;
     pCaptureDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &pCaptureClient);
     pRenderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &pRenderClient);
@@ -56,7 +56,7 @@ void AudioEngine::Run(IMMDevice* pCaptureDevice, IMMDevice* pRenderDevice, IAudi
     pCaptureClient->Start();
     pRenderClient->Start();
 
-    while (!_kbhit()) {
+    while (*pIsRunning) {
         Sleep(5);
         UINT32 packetLength = 0;
         pCaptureService->GetNextPacketSize(&packetLength);
